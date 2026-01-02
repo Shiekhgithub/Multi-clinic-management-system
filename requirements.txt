@@ -1,0 +1,15 @@
+streamlit
+fastapi
+uvicorn
+requests
+python-dotenv
+langchain
+langchain-openai
+langchain-community
+langchain-huggingface
+langgraph
+faiss-cpu
+pypdf
+unstructured
+markdown
+sentence-transformers

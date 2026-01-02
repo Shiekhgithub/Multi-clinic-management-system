@@ -1,27 +1,38 @@
-from fastapi import FastAPI, Request, Depends, HTTPException, UploadFile, File
+from fastapi import FastAPI, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from Agents import graph, Load_Docs
 import tempfile
 
 app = FastAPI()
 
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
+
+
 class user_entry(BaseModel):
-    question : str
+    question: str
 
 
 @app.post("/Upload_File")
-async def upload(file : UploadFile):
+async def upload(file: UploadFile):
     with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp:
         temp.write(await file.read())
         temp_path = temp.name
 
-    faiss_index = Load_Docs(temp_path)
+    Load_Docs(temp_path)
 
     return {
-    "filename": file.filename,
-    "stored_path": temp_path,
-    "status": "Processed successfully",
-}
+        "filename": file.filename,
+        "stored_path": temp_path,
+        "status": "Processed successfully",
+    }
 
 
 @app.post("/chat")

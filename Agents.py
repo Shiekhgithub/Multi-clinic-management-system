@@ -6,8 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langgraph.graph import START, StateGraph, END
 from typing_extensions import List, TypedDict
-from langchain_huggingface import HuggingFaceEmbeddings  # ✅ NEW UPDATED IMPORT
-import streamlit as st
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from pathlib import Path
 
@@ -17,8 +16,9 @@ load_dotenv()
 
 openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
+# Using Meta Llama 3.2 - reliable free tier model
 llm = ChatOpenAI(
-    model_name="openai/gpt-oss-20b:free",
+    model_name="meta-llama/llama-3.2-3b-instruct:free",
     api_key=openrouter_key,
     base_url="https://openrouter.ai/api/v1"
 )
@@ -44,7 +44,7 @@ def Pdf_loader(filepath: str):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(pdf_docs)
     pdf_index = FAISS.from_documents(parts, emb)
-    pdf_index.save_local("pdf-index")
+    pdf_index.save_local("faiss-index")
 
 
 def Text_loader(filepath: str):
@@ -53,7 +53,7 @@ def Text_loader(filepath: str):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(txt_docs)
     txt_index = FAISS.from_documents(parts, emb)
-    txt_index.save_local("text-index")
+    txt_index.save_local("faiss-index")
 
 
 def Md_loader(filepath: str):
@@ -62,7 +62,7 @@ def Md_loader(filepath: str):
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(md_docs)
     md_index = FAISS.from_documents(parts, emb)
-    md_index.save_local("md-index")
+    md_index.save_local("faiss-index")
 
 
 # ---------------------- STATE ----------------------
@@ -79,19 +79,16 @@ def Load_Docs(filename: str):
     file_type = detect_file_type(filename)
 
     if file_type == ".pdf":
-        if not os.path.exists("pdf-index"):
-            Pdf_loader(filename)
-        faiss_index = FAISS.load_local("pdf-index", emb, allow_dangerous_deserialization=True)
+        Pdf_loader(filename)
+        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
 
     elif file_type == ".txt":
-        if not os.path.exists("text-index"):
-            Text_loader(filename)
-        faiss_index = FAISS.load_local("text-index", emb, allow_dangerous_deserialization=True)
+        Text_loader(filename)
+        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
 
     elif file_type == ".md":
-        if not os.path.exists("md-index"):
-            Md_loader(filename)
-        faiss_index = FAISS.load_local("md-index", emb, allow_dangerous_deserialization=True)
+        Md_loader(filename)
+        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
 
     else:
         raise ValueError("Unsupported file format")
@@ -101,6 +98,14 @@ def Load_Docs(filename: str):
 
 # ---------------------- RAG FUNCTIONS ----------------------
 def retrieve(state: State):
+    global faiss_index
+    # Load the index if not already loaded
+    if faiss_index is None and os.path.exists("faiss-index"):
+        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
+    
+    if faiss_index is None:
+        raise ValueError("No document has been uploaded yet. Please upload a document first.")
+    
     results = faiss_index.similarity_search(state["question"])
     return {"context": results}
 
@@ -110,19 +115,17 @@ def generate(state: State):
     question = state["question"]
 
     prompt = f"""
-You are an intelligent cardiology research assistant.
+You are an intelligent medical assistant for a multi-clinic management system. You help clinic staff (doctors, receptionists, administrators) and patients by providing accurate information based on uploaded medical documents and clinic resources.
 
-Use ONLY the provided context to answer.
+IMPORTANT RULES:
+1. Answer ONLY based on the provided context below
+2. If the question is not related to the uploaded medical documents or clinical information, politely decline and say: "I can only answer questions based on the uploaded medical documents and clinical information in our system."
+3. Provide clear, professional, and accurate responses
+4. If you cannot find the answer in the context, say: "I don't have that specific information in the uploaded documents. Please consult with your healthcare provider or clinic staff for more details."
+5. Never make up medical information or provide advice beyond what's in the documents
+6. Be helpful to all user types: patients seeking information, clinic staff looking up protocols, or administrators reviewing resources
 
-Rules:
-- DO NOT answer anything unrelated to heart diseases.
-- If question is unrelated say: "I can just answer about Heart Related queries."
-- Respond in clear and professional paragraphs.
-- At the end ALWAYS add this line exactly:
-
-Would you like to book appointment with our Cardiologist Dr Ahmed? Please click on the link below to book your appointment.
-
-Context:
+Context from uploaded documents:
 {docs_text}
 
 Question:
@@ -146,27 +149,3 @@ Graph_builder.add_edge("Retriever", "Generator")
 Graph_builder.add_edge("Generator", END)
 
 graph = Graph_builder.compile()
-
-
-# ---------------------- STREAMLIT UI ----------------------
-st.title("🫀 AI Heart Disease Assistant")
-
-uploaded_file = st.file_uploader("Upload PDF, TXT, or MD File", type=["pdf", "txt", "md"])
-
-if uploaded_file:
-    file_path = uploaded_file.name
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.read())
-
-    st.success("File uploaded successfully!")
-    Load_Docs(file_path)
-
-user_question = st.text_input("Ask a question related to Heart Disease:")
-
-if st.button("Ask"):
-    if not user_question.strip():
-        st.warning("Please enter a question.")
-    else:
-        result = graph.invoke({"question": user_question})
-        st.write(result["answer"])
-        st.write("\n")  # ✅ NEW LINE FIX FOR STREAMLIT
