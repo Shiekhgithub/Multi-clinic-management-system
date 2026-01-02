@@ -43,8 +43,7 @@ def Pdf_loader(filepath: str):
     pdf_docs = pdf.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(pdf_docs)
-    pdf_index = FAISS.from_documents(parts, emb)
-    pdf_index.save_local("faiss-index")
+    return parts
 
 
 def Text_loader(filepath: str):
@@ -52,8 +51,7 @@ def Text_loader(filepath: str):
     txt_docs = txt.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(txt_docs)
-    txt_index = FAISS.from_documents(parts, emb)
-    txt_index.save_local("faiss-index")
+    return parts
 
 
 def Md_loader(filepath: str):
@@ -61,8 +59,7 @@ def Md_loader(filepath: str):
     md_docs = md.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     parts = splitter.split_documents(md_docs)
-    md_index = FAISS.from_documents(parts, emb)
-    md_index.save_local("faiss-index")
+    return parts
 
 
 # ---------------------- STATE ----------------------
@@ -73,25 +70,36 @@ class State(TypedDict):
 
 
 # ---------------------- Document Loader ----------------------
-def Load_Docs(filename: str):
+def Load_Docs(filenames: List[str]):
     global faiss_index
 
-    file_type = detect_file_type(filename)
+    all_docs = []
+    
+    # Process each file and collect all document chunks
+    for filename in filenames:
+        file_type = detect_file_type(filename)
 
-    if file_type == ".pdf":
-        Pdf_loader(filename)
-        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
+        if file_type == ".pdf":
+            docs = Pdf_loader(filename)
+            all_docs.extend(docs)
 
-    elif file_type == ".txt":
-        Text_loader(filename)
-        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
+        elif file_type == ".txt":
+            docs = Text_loader(filename)
+            all_docs.extend(docs)
 
-    elif file_type == ".md":
-        Md_loader(filename)
-        faiss_index = FAISS.load_local("faiss-index", emb, allow_dangerous_deserialization=True)
+        elif file_type == ".md":
+            docs = Md_loader(filename)
+            all_docs.extend(docs)
 
+        else:
+            raise ValueError(f"Unsupported file format: {file_type}")
+    
+    # Create a single FAISS index from all documents
+    if all_docs:
+        faiss_index = FAISS.from_documents(all_docs, emb)
+        faiss_index.save_local("faiss-index")
     else:
-        raise ValueError("Unsupported file format")
+        raise ValueError("No documents were loaded")
 
     return faiss_index
 

@@ -20,21 +20,29 @@ if "file_uploaded" not in st.session_state:
 # ==========================
 # FILE UPLOAD SECTION
 # ==========================
-st.subheader("Step 1: Upload a document")
+st.subheader("Step 1: Upload documents")
 
-uploaded_file = st.file_uploader("Upload PDF, TXT, or MD file", type=["pdf", "txt", "md"])
+uploaded_files = st.file_uploader(
+    "Upload PDF, TXT, or MD files (you can select multiple)", 
+    type=["pdf", "txt", "md"],
+    accept_multiple_files=True
+)
 
-if uploaded_file and not st.session_state.file_uploaded:
-    with st.spinner("📂 Uploading and processing your file..."):
-        files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
+if uploaded_files and not st.session_state.file_uploaded:
+    with st.spinner(f"📂 Uploading and processing {len(uploaded_files)} file(s)..."):
+        # Prepare multiple files for upload
+        files = [("files", (file.name, file, file.type)) for file in uploaded_files]
+        
         response = requests.post(f"{FASTAPI_URL}/Upload_File", files=files)
 
         if response.status_code == 200:
-            st.success(f"✅ {uploaded_file.name} processed successfully!")
+            result = response.json()
+            file_list = ", ".join(result.get("filenames", []))
+            st.success(f"✅ {result.get('count', 0)} file(s) processed successfully: {file_list}")
             st.session_state.file_uploaded = True
             st.session_state.messages = []  # Clear previous chat history
         else:
-            st.error("❌ Failed to process file.")
+            st.error("❌ Failed to process files.")
             st.stop()
 
 

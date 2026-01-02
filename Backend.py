@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from Agents import graph, Load_Docs
 import tempfile
+from typing import List
 
 app = FastAPI()
 
@@ -21,17 +22,24 @@ class user_entry(BaseModel):
 
 
 @app.post("/Upload_File")
-async def upload(file: UploadFile):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp:
-        temp.write(await file.read())
-        temp_path = temp.name
-
-    Load_Docs(temp_path)
+async def upload(files: List[UploadFile]):
+    processed_files = []
+    temp_paths = []
+    
+    for file in files:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=file.filename) as temp:
+            temp.write(await file.read())
+            temp_path = temp.name
+            temp_paths.append(temp_path)
+            processed_files.append(file.filename)
+    
+    # Load all documents into the same index
+    Load_Docs(temp_paths)
 
     return {
-        "filename": file.filename,
-        "stored_path": temp_path,
-        "status": "Processed successfully",
+        "filenames": processed_files,
+        "count": len(processed_files),
+        "status": "All files processed successfully",
     }
 
 
