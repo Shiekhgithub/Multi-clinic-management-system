@@ -142,8 +142,18 @@ Question:
 Answer:
 """
 
-    response = llm.invoke(prompt)
-    return {"answer": response.content}
+    try:
+        response = llm.invoke(prompt)
+        return {"answer": response.content}
+    except Exception as e:
+        error_msg = str(e)
+        print(error_msg)
+        if "401" in error_msg or "AuthenticationError" in str(type(e)):
+            return {"answer": "⚠️ API Authentication Error: Your OpenRouter API key may be invalid or your account may need credits. Please visit https://openrouter.ai/ to check your account status."}
+        elif "429" in error_msg:
+            return {"answer": "⚠️ Rate limit exceeded. Please wait a moment before asking another question."}
+        else:
+            return {"answer": f"⚠️ Error generating response: {error_msg}. Please try again."}
 
 
 # ---------------------- GRAPH ----------------------
